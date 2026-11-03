@@ -1,0 +1,1 @@
+扫描本机路径统计Antigravity消耗的tokens
