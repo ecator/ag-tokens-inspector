@@ -1,7 +1,7 @@
 [project]
 name = "ag-tokens-inspector"
 dynamic = ["version"]
-description = "A token inspect tool for Antigravity"
+description = "A token inspector for Antigravity"
 readme = "README.md"
 authors = [{ name = "Martin", email = "qule520@126.com" }]
 requires-python = ">=3.14"
