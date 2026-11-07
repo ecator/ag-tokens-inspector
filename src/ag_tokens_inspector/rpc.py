@@ -5,7 +5,9 @@ import re
 import ssl
 import subprocess
 import urllib.request
+from datetime import date, datetime
 
+from .dates import in_range
 from .stats import Stats, record_usage
 
 RPC_PATH = "/exa.language_server_pb.LanguageServerService/"
@@ -66,9 +68,33 @@ def call_ls_rpc(port: int, csrf: str, method: str, payload: dict) -> dict | None
     return None
 
 
-def extract_rpc_usage(node, stats: Stats, seen_uuids: set, cascade_id: str) -> None:
-    """Recursively extract usage from a GetCascadeTrajectoryGeneratorMetadata response."""
+def _node_day(node: dict) -> date | None:
+    """Best-effort local date from an RPC node's timestamp fields."""
+    for key in ("createdAt", "timestamp", "startTime", "endTime"):
+        value = node.get(key)
+        if isinstance(value, str):
+            try:
+                return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone().date()
+            except ValueError:
+                continue
+    return None
+
+
+def extract_rpc_usage(
+    node,
+    stats: Stats,
+    seen_uuids: set,
+    cascade_id: str,
+    start: date | None = None,
+    end: date | None = None,
+    day: date | None = None,
+) -> None:
+    """Recursively extract usage from a GetCascadeTrajectoryGeneratorMetadata response.
+
+    When a date range is given, only nodes whose (inherited) day is in range are counted.
+    """
     if isinstance(node, dict):
+        day = _node_day(node) or day
         usage = node.get("usage") or node.get("tokenUsage") or node.get("usageMetadata") or {}
         if isinstance(usage, dict):
             prompt = int(
@@ -90,11 +116,11 @@ def extract_rpc_usage(node, stats: Stats, seen_uuids: set, cascade_id: str) -> N
                     or "unknown-rpc"
                 )
                 uid = node.get("generationId") or node.get("uuid") or f"{cascade_id}:{id(node)}"
-                if uid not in seen_uuids:
+                if uid not in seen_uuids and in_range(day, start, end):
                     seen_uuids.add(uid)
                     record_usage(stats, model, prompt, cached, output, thoughts)
         for v in node.values():
-            extract_rpc_usage(v, stats, seen_uuids, cascade_id)
+            extract_rpc_usage(v, stats, seen_uuids, cascade_id, start, end, day)
     elif isinstance(node, list):
         for item in node:
-            extract_rpc_usage(item, stats, seen_uuids, cascade_id)
+            extract_rpc_usage(item, stats, seen_uuids, cascade_id, start, end, day)

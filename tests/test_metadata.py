@@ -29,6 +29,7 @@ def build(usage: bytes, name: bytes | None = b"Gemini", uuid: bytes = b"u1") -> 
 def test_decode_full_record():
     blob = build(vi(2, 10) + vi(3, 20) + vi(5, 30) + vi(9, 40))
     assert decode_gen_metadata_blob(blob) == {
+        "step_index": None,
         "uuid": "u1",
         "model": "Gemini",
         "prompt": 10,

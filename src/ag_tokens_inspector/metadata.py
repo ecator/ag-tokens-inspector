@@ -17,6 +17,8 @@ def decode_gen_metadata_blob(blob: bytes, fallback_model: str = "unknown") -> di
         - .1.4.5 -> cached_tokens
         - .1.4.9 -> thought_tokens
 
+    - .1.20    -> repeated key/value entries; "last_step_index" links to a step
+
     Returns None when the blob carries no usable token usage.
     """
     root = parse_proto_fields(blob)
@@ -43,6 +45,7 @@ def decode_gen_metadata_blob(blob: bytes, fallback_model: str = "unknown") -> di
         return None
 
     return {
+        "step_index": _get_step_index(chat_model),
         "uuid": gen_uuid,
         "model": model_name,
         "prompt": prompt,
@@ -50,3 +53,15 @@ def decode_gen_metadata_blob(blob: bytes, fallback_model: str = "unknown") -> di
         "cached": cached,
         "thoughts": thoughts,
     }
+
+
+def _get_step_index(chat_model: dict) -> int | None:
+    """Extract the last_step_index entry from the chat model's key/value list."""
+    for wt, val in chat_model.get(20, []):
+        if wt != 2:
+            continue
+        kv = parse_proto_fields(val)
+        if get_first_str(kv, 1) == "last_step_index":
+            text = get_first_str(kv, 2)
+            return int(text) if text.isdigit() else None
+    return None

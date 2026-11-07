@@ -39,3 +39,44 @@ def test_parse_without_table(tmp_path):
 
 def test_parse_missing_file(tmp_path):
     assert parse_sqlite_db(tmp_path / "none.db", set(), new_stats()) == 0
+
+
+def step_meta(seconds: int) -> bytes:
+    return ld(1, bytes([1 << 3]) + varint(seconds))
+
+
+def varint(n: int) -> bytes:
+    out = bytearray()
+    while n > 0x7F:
+        out.append((n & 0x7F) | 0x80)
+        n >>= 7
+    out.append(n)
+    return bytes(out)
+
+
+def blob_at(uuid: bytes, prompt: int, step: int) -> bytes:
+    kv = ld(1, b"last_step_index") + ld(2, str(step).encode())
+    usage = bytes([2 << 3, prompt])
+    return ld(1, ld(4, usage) + ld(21, b"M") + bytes([0xA2, 1, len(kv)]) + kv) + ld(4, uuid)
+
+
+def test_parse_filters_by_date(tmp_path):
+    from datetime import datetime
+
+    day1 = int(datetime(2026, 1, 1, 23, 59).timestamp())
+    day3 = int(datetime(2026, 1, 3, 0, 1).timestamp())
+    db = tmp_path / "c.db"
+    make_db(db, [(0, blob_at(b"a", 1, 0)), (1, blob_at(b"b", 2, 2)), (2, blob_at(b"c", 4, 3))])
+    conn = sqlite3.connect(db)
+    conn.execute("CREATE TABLE steps (idx INTEGER, metadata BLOB)")
+    conn.executemany("INSERT INTO steps VALUES (?, ?)", [(0, step_meta(day1)), (2, step_meta(day3))])
+    conn.commit()
+    conn.close()
+    from datetime import date
+
+    stats = new_stats()
+    assert parse_sqlite_db(db, set(), stats, date(2026, 1, 3), date(2026, 1, 3)) == 2
+    assert stats["M"].prompt == 6
+    stats = new_stats()
+    assert parse_sqlite_db(db, set(), stats, None, date(2026, 1, 1)) == 1
+    assert stats["M"].prompt == 1

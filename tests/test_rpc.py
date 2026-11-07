@@ -71,3 +71,18 @@ def test_call_ls_rpc_failure(monkeypatch):
 
     monkeypatch.setattr(rpc.urllib.request, "urlopen", fail)
     assert rpc.call_ls_rpc(1, "t", "M", {}) is None
+
+
+def test_extract_rpc_usage_date_filter():
+    from datetime import date
+
+    node = {
+        "items": [
+            {"generationId": "a", "createdAt": "2026-01-01T12:00:00+00:00", "usage": {"promptTokens": 1}},
+            {"generationId": "b", "createdAt": "2026-03-01T12:00:00+00:00", "usage": {"promptTokens": 2}},
+            {"generationId": "c", "usage": {"promptTokens": 4}},
+        ]
+    }
+    stats = new_stats()
+    rpc.extract_rpc_usage(node, stats, set(), "c", date(2026, 2, 1), None)
+    assert stats["unknown-rpc"].prompt == 2

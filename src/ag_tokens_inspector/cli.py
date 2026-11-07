@@ -1,8 +1,10 @@
 """Command line entry point."""
 
+import argparse
 from pathlib import Path
 
 from . import __app_name__, __version__
+from .dates import parse_date
 from .report import format_report
 from .rpc import call_ls_rpc, extract_rpc_usage, get_ls_rpc_info
 from .sqlite_source import parse_sqlite_db
@@ -20,8 +22,35 @@ def get_conversation_roots(home: Path | None = None) -> list[Path]:
     ]
 
 
-def main() -> int:
+def _date_arg(text: str):
+    try:
+        return parse_date(text)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(prog=__app_name__, description="Inspect Antigravity token usage.")
+    parser.add_argument(
+        "--from",
+        dest="start",
+        type=_date_arg,
+        help="start date, inclusive (yyyyMMdd, yyyy-MM-dd, yyyy/MM/dd)",
+    )
+    parser.add_argument(
+        "--to", dest="end", type=_date_arg, help="end date, inclusive (yyyyMMdd, yyyy-MM-dd, yyyy/MM/dd)"
+    )
+    args = parser.parse_args(argv)
+    if args.start and args.end and args.start > args.end:
+        parser.error("--from must not be later than --to")
+    return args
+
+
+def main(argv: list[str] | None = None) -> int:
     """Scan all conversations and print the token usage report."""
+    args = parse_args(argv)
+    start, end = args.start, args.end
     print(f"{__app_name__} v{__version__}")
     db_files: list[Path] = []
     pb_files: list[Path] = []
@@ -39,7 +68,7 @@ def main() -> int:
     seen_uuids: set = set()
 
     # 1. Parse all .db files directly.
-    db_turns = sum(parse_sqlite_db(db, seen_uuids, stats) for db in db_files)
+    db_turns = sum(parse_sqlite_db(db, seen_uuids, stats, start, end) for db in db_files)
     if db_files:
         print(f"Extracted {db_turns} model call records from .db databases.")
 
@@ -61,7 +90,7 @@ def main() -> int:
                     )
                     if res:
                         working_port = port
-                        extract_rpc_usage(res, stats, seen_uuids, cid)
+                        extract_rpc_usage(res, stats, seen_uuids, cid, start, end)
                         break
         else:
             print(
