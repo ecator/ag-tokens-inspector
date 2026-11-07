@@ -23,4 +23,7 @@ Repository = "https://github.com/ecator/ag-tokens-inspector"
 
 
 [dependency-groups]
-dev = ["pytest>=9.2.0", "ruff>=0.17.3"]
+dev = [
+    "pytest>=9.2.0",
+    "ruff>=0.17.3",
+]
